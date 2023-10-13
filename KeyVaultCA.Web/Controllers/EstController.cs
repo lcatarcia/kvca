@@ -50,18 +50,18 @@ namespace KeyVaultCA.Web.Controllers
         {
             _logger.LogDebug("Call 'Simple Enroll' endpoint.");
 
-            var cleanedUpBody = await GetAsn1StructureFromBody();
+            string cleanedUpBody = await GetAsn1StructureFromBody();
 
             _logger.LogDebug("Request body is: {body}.", cleanedUpBody);
 
-            var caCert = Request.Path.StartsWithSegments("/ca");
+            bool caCert = Request.Path.StartsWithSegments("/ca");
 
             _logger.LogInformation("Is a CA certificate: {flag}.", caCert);
 
-            var cert = await _keyVaultCertProvider.SignRequestAsync(
+            X509Certificate2 cert = await _keyVaultCertProvider.SignRequestAsync(
                 Convert.FromBase64String(cleanedUpBody), _configuration.IssuingCA, _configuration.CertValidityInDays, caCert);
 
-            var pkcs7 = EncodeCertificatesAsPkcs7(new[] { cert });
+            string pkcs7 = EncodeCertificatesAsPkcs7(new[] { cert });
             return Content(pkcs7, PKCS7_MIME_TYPE);
         }
 
@@ -84,6 +84,17 @@ namespace KeyVaultCA.Web.Controllers
             // Need to handle different types of Line Breaks
             var tokens = body.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
             var token = tokens.Length > 1 ? string.Join(string.Empty, tokens) : tokens.FirstOrDefault();
+
+            _logger.LogDebug("Returning token: {token} ", token);
+
+            return token;
+        }
+
+        private async Task<string> GetAsn1StructureFromBody(string body)
+        {
+            // Need to handle different types of Line Breaks
+            string[] tokens = body.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            string token = tokens.Length > 1 ? string.Join(string.Empty, tokens) : tokens.FirstOrDefault();
 
             _logger.LogDebug("Returning token: {token} ", token);
 

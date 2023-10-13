@@ -18,6 +18,10 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using System.Linq;
+using Microsoft.Extensions.Azure;
+using KeyVaultCA.Web.KeyVault;
+using Azure.Security.KeyVault.Secrets;
+using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace KeyVaultCA.Web
 {
@@ -42,16 +46,25 @@ namespace KeyVaultCA.Web
         {
             services.AddApplicationInsightsTelemetry();
 
-            var estConfig = Configuration.GetSection("KeyVault").Get<EstConfiguration>();
+            EstConfiguration estConfig = Configuration.GetSection("KeyVault").Get<EstConfiguration>();
             services.AddSingleton(estConfig);
 
-            var estAuth = Configuration.GetSection("EstAuthentication").Get<AuthConfiguration>();
+            AuthConfiguration estAuth = Configuration.GetSection("EstAuthentication").Get<AuthConfiguration>();
             services.AddSingleton(estAuth);
 
             var azureCredential = new DefaultAzureCredential();
             services.AddSingleton(azureCredential);
             services.AddSingleton<KeyVaultServiceClient>();
             services.AddSingleton<IKeyVaultCertificateProvider, KeyVaultCertificateProvider>();
+
+            services.AddAzureClients(azureClientFactoryBuilder =>
+            {
+                azureClientFactoryBuilder.AddSecretClient(
+                    Configuration.GetSection("KeyVault")
+                    );
+            });
+            services.AddSingleton<IKeyVaultManager, KeyVaultManager>();
+            var secretManager =
 
             services.AddControllers();
 
@@ -65,7 +78,7 @@ namespace KeyVaultCA.Web
             else if (estAuth.AuthMode == AuthMode.x509)
             {
                 services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
-                   .AddCertificate(options =>
+                   .AddCertificate(async options =>
                    {
                        var trustedCAs = new List<X509Certificate2>();
                        var currentDirectory = AppContext.BaseDirectory;
@@ -75,8 +88,6 @@ namespace KeyVaultCA.Web
                        logger.LogTrace("directory: {0}", trustedCADir);
 
 
-
-
 #if DEBUG
                        foreach (string file in Directory.EnumerateFiles(trustedCADir, "*.cer"))
                        {
@@ -84,13 +95,24 @@ namespace KeyVaultCA.Web
                            trustedCAs.Add(X509Certificate2.CreateFromPem(contents));
                        }
 #else
+                       // secret fetched from KeyVault. It contains the thumbprint of the certificate
+                       SecretClient secretClient = new SecretClient(
+                         new Uri(Configuration.GetSection("KeyVault:KeyVaultUrl").Value),
+                         azureCredential);
+                       string secretValue = string.Empty;
+                       using (KeyVaultManager secretManager = new KeyVaultManager(secretClient))
+                       {
+                           string secretName = "CertThumbprint";
+                           secretValue = await secretManager.GetSecret(secretName);
+                       }
+
                        using (X509Store certStore = new X509Store(StoreName.My, StoreLocation.CurrentUser))
                        {
                            certStore.Open(OpenFlags.ReadOnly);
 
                            X509Certificate2Collection certCollection = certStore.Certificates.Find(
                                                        X509FindType.FindByThumbprint,
-                                                       "678C532F95AAB6DD9EBCBD2CD35CA8F152963DBA",
+                                                       secretValue,
                                                        false);
                            // Get the first cert with the thumbprint (should be only one)
                            X509Certificate2 signingCert = certCollection.OfType<X509Certificate2>().FirstOrDefault();
