@@ -17,6 +17,7 @@ using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace KeyVaultCA.Web
 {
@@ -72,11 +73,35 @@ namespace KeyVaultCA.Web
                        var trustedCADir = Path.Combine(currentDirectory, @"TrustedCAs");
 
                        logger.LogTrace("directory: {0}", trustedCADir);
+
+
+
+
+#if DEBUG
                        foreach (string file in Directory.EnumerateFiles(trustedCADir, "*.cer"))
                        {
                            string contents = File.ReadAllText(file);
                            trustedCAs.Add(X509Certificate2.CreateFromPem(contents));
                        }
+#else
+                       using (X509Store certStore = new X509Store(StoreName.My, StoreLocation.CurrentUser))
+                       {
+                           certStore.Open(OpenFlags.ReadOnly);
+
+                           X509Certificate2Collection certCollection = certStore.Certificates.Find(
+                                                       X509FindType.FindByThumbprint,
+                                                       "678C532F95AAB6DD9EBCBD2CD35CA8F152963DBA",
+                                                       false);
+                           // Get the first cert with the thumbprint (should be only one)
+                           X509Certificate2 signingCert = certCollection.OfType<X509Certificate2>().FirstOrDefault();
+
+                           //if (signingCert is null)
+                           //    throw new Exception($"Certificate with thumbprint {options.SigningCertificateThumbprint} was not found");
+
+                           trustedCAs.Add(signingCert);
+                       }
+
+#endif
 
                        options.CustomTrustStore.AddRange(new X509Certificate2Collection(trustedCAs.ToArray()));
 
@@ -136,9 +161,10 @@ namespace KeyVaultCA.Web
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseSwagger();
-                app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "KeyVaultCA.Web v1"));
             }
+
+            app.UseSwagger();
+            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "KeyVaultCA.Web v1"));
 
             app.UseRouting();
             app.UseCertificateForwarding();
