@@ -1,3 +1,5 @@
+using Azure;
+using KeyVaultCa.Core.Models;
 using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
@@ -7,6 +9,10 @@ namespace KeyVaultCa.Core
     public interface IKeyVaultCertificateProvider
     {
         Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength);
+        Task<byte[]> CreateCsrCertificateAsync(CreateCsrRequest csrRequest);
+        Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CreateCsrRequest csrRequest);
+
+        Task<Response<X509Certificate2>> DownloadCertificateAsync(string name);
 
         Task<IList<X509Certificate2>> GetPublicCertificatesByName(IEnumerable<string> certNames);
 

@@ -3,10 +3,16 @@
 //  Licensed under the MIT License (MIT). See License.txt in the repo root for license information.
 // ------------------------------------------------------------
 
+using Azure;
+using Azure.Security.KeyVault.Certificates;
+using KeyVaultCa.Core.Models;
 using Microsoft.Extensions.Logging;
+using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Pkcs;
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 
@@ -25,7 +31,7 @@ namespace KeyVaultCa.Core
 
         public async Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength)
         {
-            var certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName).ConfigureAwait(false);
+            int certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(issuerCertificateName).ConfigureAwait(false);
 
             if (certVersions != 0)
             {
@@ -35,7 +41,7 @@ namespace KeyVaultCa.Core
             else
             {
                 _logger.LogInformation("No existing certificate found, starting to create a new one.");
-                var notBefore = DateTime.UtcNow.AddDays(-1);
+                DateTime notBefore = DateTime.UtcNow.AddDays(-1);
                 await _keyVaultServiceClient.CreateCACertificateAsync(
                         issuerCertificateName,
                         subject,
@@ -48,20 +54,99 @@ namespace KeyVaultCa.Core
             }
         }
 
+        public async Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CreateCsrRequest csrRequest)
+        {
+            int certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(csrRequest.CertificateName).ConfigureAwait(false);
+            X509Certificate2 result = null;
+
+            if (certVersions != 0)
+            {
+                _logger.LogInformation("A certificate with the specified issuer name {name} already exists.", csrRequest.CertificateName);
+            }
+
+            else
+            {
+                _logger.LogInformation("No existing certificate found, starting to create a new one.");
+                DateTime notBefore = DateTime.UtcNow.AddDays(-1);
+                string subject= $"C={csrRequest.Country}, ST={csrRequest.State}, L={csrRequest.Locality}, O={csrRequest.Organization}, OU={csrRequest.OrganizationUnit}, CN={csrRequest.CommonName}";
+                result = await _keyVaultServiceClient.CreateCsrCertificateAndSignAsync(
+                        csrRequest.CertificateName,
+                        subject,
+                        notBefore,
+                        notBefore.AddMonths(48),
+                        csrRequest.KeySize,
+                        256,
+                        1);
+
+                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created succsessfully.", csrRequest.CertificateName, csrRequest.KeySize);
+            }
+            return result;
+        }
+
+        public async Task<byte[]> CreateCsrCertificateAsync(CreateCsrRequest csrRequest)
+        {
+            int certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(csrRequest.CertificateName).ConfigureAwait(false);
+            byte[] result = null;
+
+            if (certVersions != 0)
+            {
+                _logger.LogInformation("A certificate with the specified issuer name {name} already exists.", csrRequest.CertificateName);
+            }
+
+            else
+            {
+                _logger.LogInformation("No existing certificate found, starting to create a new one.");
+                DateTime notBefore = DateTime.UtcNow.AddDays(-1);
+                //result = await _keyVaultServiceClient.CreateCsrCertificateAsync(
+                //        issuerCertificateName,
+                //        subject,
+                //        notBefore,
+                //        notBefore.AddMonths(48),
+                //        4096,
+                //        256,
+                //        certPathLength);
+
+                result = await _keyVaultServiceClient.CreateCsrCertificateAsync(csrRequest);
+                _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created succsessfully.", csrRequest.CertificateName, csrRequest.KeySize);
+            }
+            return result;
+        }
+
+        public async Task<Response<X509Certificate2>> DownloadCertificateAsync(string name) 
+            => await _keyVaultServiceClient.DownloadCertificateAsync(name);
+
         public async Task<X509Certificate2> GetCertificateAsync(string issuerCertificateName)
         {
-            var certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
+            Response<KeyVaultCertificateWithPolicy> certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
             return new X509Certificate2(certBundle.Value.Cer);
         }
 
         public async Task<IList<X509Certificate2>> GetPublicCertificatesByName(IEnumerable<string> certNames)
         {
-            var certs = new List<X509Certificate2>();
+            List<X509Certificate2> certs = new List<X509Certificate2>();
 
-            foreach (var issuerName in certNames)
+            foreach (string issuerName in certNames)
             {
                 _logger.LogDebug("Call GetPublicCertificatesByName method with following certificate name: {name}.", issuerName);
-                var cert = await GetCertificateAsync(issuerName).ConfigureAwait(false);
+                X509Certificate2 cert = await GetCertificateAsync(issuerName).ConfigureAwait(false);
+
+                if (cert != null)
+                {
+                    certs.Add(cert);
+                }
+            }
+
+            return certs;
+        }
+
+        public async Task<IList<X509Certificate2>> GetSignedCertificatesByName(IEnumerable<string> certNames)
+        {
+            List<X509Certificate2> certs = new List<X509Certificate2>();
+
+            foreach (string issuerName in certNames)
+            {
+                _logger.LogDebug("Call GetSignedCertificatesByName method with following certificate name: {name}.", issuerName);
+                X509Certificate2 cert = await GetCertificateAsync(issuerName).ConfigureAwait(false);
 
                 if (cert != null)
                 {
@@ -83,7 +168,7 @@ namespace KeyVaultCa.Core
         {
             _logger.LogInformation("Preparing certificate request with issuer name {name}, {days} days validity period and 'is a CA certificate' flag set to {flag}.", issuerCertificateName, validityInDays, caCert);
 
-            var pkcs10CertificationRequest = new Pkcs10CertificationRequest(certificateRequest);
+            Pkcs10CertificationRequest pkcs10CertificationRequest = new Pkcs10CertificationRequest(certificateRequest);
 
             if (!pkcs10CertificationRequest.Verify())
             {
@@ -91,13 +176,13 @@ namespace KeyVaultCa.Core
                 throw new ArgumentException("CSR signature invalid.");
             }
 
-            var info = pkcs10CertificationRequest.GetCertificationRequestInfo();
-            var notBefore = DateTime.UtcNow.AddDays(-1);
+            CertificationRequestInfo info = pkcs10CertificationRequest.GetCertificationRequestInfo();
+            DateTime notBefore = DateTime.UtcNow.AddDays(-1);
 
-            var certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
+            Response<KeyVaultCertificateWithPolicy> certBundle = await _keyVaultServiceClient.GetCertificateAsync(issuerCertificateName).ConfigureAwait(false);
 
-            var signingCert = new X509Certificate2(certBundle.Value.Cer);
-            var publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
+            X509Certificate2 signingCert = new X509Certificate2(certBundle.Value.Cer);
+            RSA publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
 
             return await KeyVaultCertFactory.CreateSignedCertificate(
                 info.Subject.ToString(),

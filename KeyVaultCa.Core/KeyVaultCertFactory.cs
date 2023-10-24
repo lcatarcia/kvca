@@ -48,13 +48,13 @@ namespace KeyVaultCa.Core
             RandomNumberGenerator.Fill(serialNumber);
             serialNumber[0] &= 0x7F;
 
-            var subjectDN = new X500DistinguishedName(subjectName);
-            var request = new CertificateRequest(subjectDN, publicKey, GetRSAHashAlgorithmName(hashSizeInBits), RSASignaturePadding.Pkcs1);
+            X500DistinguishedName subjectDN = new(subjectName);
+            CertificateRequest request = new(subjectDN, publicKey, GetRSAHashAlgorithmName(hashSizeInBits), RSASignaturePadding.Pkcs1);
 
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(caCert, caCert, certPathLength, true));
 
             // Subject Key Identifier
-            var ski = new X509SubjectKeyIdentifierExtension(
+            X509SubjectKeyIdentifierExtension ski = new(
                 request.PublicKey,
                 X509SubjectKeyIdentifierHashAlgorithm.Sha1,
                 false);
@@ -107,7 +107,7 @@ namespace KeyVaultCa.Core
                 }
             }
 
-            var issuerSubjectName = issuerCAKeyCert != null ? issuerCAKeyCert.SubjectName : subjectDN;
+            X500DistinguishedName issuerSubjectName = issuerCAKeyCert != null ? issuerCAKeyCert.SubjectName : subjectDN;
             X509Certificate2 signedCert = request.Create(
                 issuerSubjectName,
                 generator,

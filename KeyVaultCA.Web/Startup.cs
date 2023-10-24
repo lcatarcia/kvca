@@ -1,14 +1,17 @@
 using Azure.Identity;
 using KeyVaultCa.Core;
 using KeyVaultCA.Web.Auth;
+using KeyVaultCA.Web.KeyVault;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using System;
 using System.Collections.Generic;
@@ -16,12 +19,6 @@ using System.IO;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using System.Linq;
-using Microsoft.Extensions.Azure;
-using KeyVaultCA.Web.KeyVault;
-using Azure.Security.KeyVault.Secrets;
-using static Org.BouncyCastle.Math.EC.ECCurve;
 
 namespace KeyVaultCA.Web
 {
