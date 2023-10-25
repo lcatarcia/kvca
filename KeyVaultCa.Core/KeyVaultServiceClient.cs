@@ -162,6 +162,8 @@ namespace KeyVaultCa.Core
 
         internal async Task<X509Certificate2> CreateCsrCertificateAndSignAsync(
                 string id,
+                PublicKey rootPublicKey,
+                string issuerCAName,
                 string subject,
                 DateTime notBefore,
                 DateTime notAfter,
@@ -207,7 +209,7 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Temporary certificate backing key identifier is {key}.", createdCertificateBundle.Value.KeyId);
 
                 // create policy for unknown issuer and reuse key
-                var policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
+                CertificatePolicy policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
                 var tags = CreateCertificateTags(id, false);
 
                 // create the CSR
@@ -222,7 +224,7 @@ namespace KeyVaultCa.Core
                 // decode the CSR and verify consistency
                 _logger.LogDebug("Decode the CSR and verify consistency.");
                 Pkcs10CertificationRequest pkcs10CertificationRequest = new(createResult.Properties.Csr);
-                var info = pkcs10CertificationRequest.GetCertificationRequestInfo();
+                CertificationRequestInfo info = pkcs10CertificationRequest.GetCertificationRequestInfo();
                 if (createResult.Properties.Csr == null ||
                     pkcs10CertificationRequest == null ||
                     !pkcs10CertificationRequest.Verify())
@@ -233,23 +235,28 @@ namespace KeyVaultCa.Core
 
                 // create the self signed root CA certificate
                 _logger.LogDebug("Create the self signed root CA certificate.");
-                RSA publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
+
+                RSA rsa = rootPublicKey.GetRSAPublicKey();
+                Response<KeyVaultCertificateWithPolicy> caCertificate = await GetCertificateAsync(issuerCAName, ct);
+                byte[] cer = caCertificate.Value.Cer;
+                X509Certificate2 issuerCertificate = new(cer);
+                
                 X509Certificate2 signedcert = await KeyVaultCertFactory.CreateSignedCertificate(
                     subject,
                     (ushort)keySize,
                     notBefore,
                     notAfter,
                     (ushort)hashSize,
-                    null,
-                    publicKey,
+                    issuerCertificate,
+                    rsa,
                     new KeyVaultSignatureGenerator(Credential, createdCertificateBundle.Value.KeyId, null),
-                    true,
+                    false,
                     certPathLength);
 
                 // merge Root CA cert with the signed certificate
-                _logger.LogDebug("Merge Root CA certificate with the signed certificate.");
-                MergeCertificateOptions options = new(id, new[] { signedcert.Export(X509ContentType.Pkcs12) });
-                Response<KeyVaultCertificateWithPolicy> mergeResult = await _certificateClient.MergeCertificateAsync(options);
+                //_logger.LogDebug("Merge Root CA certificate with the signed certificate.");
+                //MergeCertificateOptions options = new(id, new[] { signedcert.Export(X509ContentType.Pkcs12) });
+                //Response<KeyVaultCertificateWithPolicy> mergeResult = await _certificateClient.MergeCertificateAsync(options);
 
                 return signedcert;
             }
@@ -302,7 +309,8 @@ namespace KeyVaultCa.Core
         //        CancellationToken ct = default)
         //{
         internal async Task<byte[]> CreateCsrCertificateAsync(
-                CreateCsrRequest csrRequest,
+                CertificateSigningRequest csrRequest,
+                PublicKey publicKey,
                 CancellationToken ct = default)
         {
             try
@@ -370,27 +378,6 @@ namespace KeyVaultCa.Core
 
                 return createResult.Properties.Csr;
 
-                //// create the self signed root CA certificate
-                //_logger.LogDebug("Create the self signed root CA certificate.");
-                //RSA publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
-                //X509Certificate2 signedcert = await KeyVaultCertFactory.CreateSignedCertificate(
-                //subject,
-                //    (ushort)keySize,
-                //    notBefore,
-                //    notAfter,
-                //    (ushort)hashSize,
-                //    null,
-                //    publicKey,
-                //    new KeyVaultSignatureGenerator(Credential, createdCertificateBundle.Value.KeyId, null),
-                //    true,
-                //    certPathLength);
-
-                //// merge Root CA cert with the signed certificate
-                //_logger.LogDebug("Merge Root CA certificate with the signed certificate.");
-                //MergeCertificateOptions options = new MergeCertificateOptions(id, new[] { signedcert.Export(X509ContentType.Pkcs12) });
-                //Response<KeyVaultCertificateWithPolicy> mergeResult = await _certificateClient.MergeCertificateAsync(options);
-
-                //return signedcert;
             }
             catch (Exception ex)
             {

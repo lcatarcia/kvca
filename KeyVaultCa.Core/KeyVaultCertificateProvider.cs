@@ -54,7 +54,7 @@ namespace KeyVaultCa.Core
             }
         }
 
-        public async Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CreateCsrRequest csrRequest)
+        public async Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CertificateSigningRequest csrRequest, PublicKey publicKey, string issuerCAName)
         {
             int certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(csrRequest.CertificateName).ConfigureAwait(false);
             X509Certificate2 result = null;
@@ -67,13 +67,16 @@ namespace KeyVaultCa.Core
             else
             {
                 _logger.LogInformation("No existing certificate found, starting to create a new one.");
-                DateTime notBefore = DateTime.UtcNow.AddDays(-1);
-                string subject= $"C={csrRequest.Country}, ST={csrRequest.State}, L={csrRequest.Locality}, O={csrRequest.Organization}, OU={csrRequest.OrganizationUnit}, CN={csrRequest.CommonName}";
+                DateTime notBefore = csrRequest.StartDate != null ? csrRequest.StartDate.Value : DateTime.UtcNow.AddDays(-1);
+                DateTime notAfter = csrRequest.EndDate != null ? csrRequest.EndDate.Value : notBefore.AddMonths(48);
+                string subject = $"C={csrRequest.Country}, ST={csrRequest.State}, L={csrRequest.Locality}, O={csrRequest.Organization}, OU={csrRequest.OrganizationUnit}, CN={csrRequest.CommonName}";
                 result = await _keyVaultServiceClient.CreateCsrCertificateAndSignAsync(
                         csrRequest.CertificateName,
+                        publicKey,
+                        issuerCAName,
                         subject,
                         notBefore,
-                        notBefore.AddMonths(48),
+                        notAfter,
                         csrRequest.KeySize,
                         256,
                         1);
@@ -83,7 +86,7 @@ namespace KeyVaultCa.Core
             return result;
         }
 
-        public async Task<byte[]> CreateCsrCertificateAsync(CreateCsrRequest csrRequest)
+        public async Task<byte[]> CreateCsrCertificateAsync(CertificateSigningRequest csrRequest, PublicKey publicKey)
         {
             int certVersions = await _keyVaultServiceClient.GetCertificateVersionsAsync(csrRequest.CertificateName).ConfigureAwait(false);
             byte[] result = null;
@@ -106,13 +109,13 @@ namespace KeyVaultCa.Core
                 //        256,
                 //        certPathLength);
 
-                result = await _keyVaultServiceClient.CreateCsrCertificateAsync(csrRequest);
+                result = await _keyVaultServiceClient.CreateCsrCertificateAsync(csrRequest, publicKey);
                 _logger.LogInformation("A new certificate with issuer name {name} and path length {path} was created succsessfully.", csrRequest.CertificateName, csrRequest.KeySize);
             }
             return result;
         }
 
-        public async Task<Response<X509Certificate2>> DownloadCertificateAsync(string name) 
+        public async Task<Response<X509Certificate2>> DownloadCertificateAsync(string name)
             => await _keyVaultServiceClient.DownloadCertificateAsync(name);
 
         public async Task<X509Certificate2> GetCertificateAsync(string issuerCertificateName)

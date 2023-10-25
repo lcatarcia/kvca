@@ -9,8 +9,8 @@ namespace KeyVaultCa.Core
     public interface IKeyVaultCertificateProvider
     {
         Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength);
-        Task<byte[]> CreateCsrCertificateAsync(CreateCsrRequest csrRequest);
-        Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CreateCsrRequest csrRequest);
+        Task<byte[]> CreateCsrCertificateAsync(CertificateSigningRequest csrRequest, PublicKey publicKey);
+        Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CertificateSigningRequest csrRequest, PublicKey publicKey, string issuerCAName);
 
         Task<Response<X509Certificate2>> DownloadCertificateAsync(string name);
 

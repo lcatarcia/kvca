@@ -71,34 +71,25 @@ namespace KeyVaultCA.Web.Controllers
             return Content(pkcs7, PKCS7_MIME_TYPE);
         }
 
-        //[HttpPost]
-        //[Route("getPublicKey")]
-        //public async Task<IActionResult> GetPublicKey([FromBody] CsrContent content)
-        //{
-        //    try
-        //    {
-        //        string cleanedUpBody = await GetAsn1StructureFromBody(content.Content);
-        //        byte[] certificateRequest = Convert.FromBase64String(cleanedUpBody);
-        //        Pkcs10CertificationRequest pkcs10CertificationRequest = new(certificateRequest);
-        //        CertificationRequestInfo info = pkcs10CertificationRequest.GetCertificationRequestInfo();
-        //        RSA publicKey = KeyVaultCertFactory.GetRSAPublicKey(info.SubjectPublicKeyInfo);
-        //        return Ok(publicKey);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "GetPublicKey error");
-        //        return BadRequest(ex.Message);
-        //    }
-        //}
+        [HttpGet]
+        [Route("getPublicKey")]
+        public async Task<IActionResult> GetPublicKey()
+        {
+            List<PublicKey> publicKeys = await GetPublicKeyList();
+            if (publicKeys.Any())
+                return Ok(publicKeys);
+            return NoContent();
+        }
 
         [HttpPost]
         [Route("createCsrCertificate")]
-        public async Task<IActionResult> CreateCsrCertificate([FromBody] CreateCsrRequest csrRequest)
+        public async Task<IActionResult> CreateCsrCertificate([FromBody] CertificateSigningRequest csrRequest)
         {
             _logger.LogDebug($"Call create CSR certificate endpoint. Certificate name = {csrRequest.CertificateName}");
             try
             {
-                byte[] result = await _keyVaultCertProvider.CreateCsrCertificateAsync(csrRequest);
+                PublicKey publicKey = (await GetPublicKeyList())?.FirstOrDefault() ?? null;
+                byte[] result = await _keyVaultCertProvider.CreateCsrCertificateAsync(csrRequest, publicKey);
 
                 Response<X509Certificate2> certificate = await _keyVaultCertProvider.DownloadCertificateAsync(csrRequest.CertificateName);
 
@@ -114,12 +105,14 @@ namespace KeyVaultCA.Web.Controllers
 
         [HttpPost]
         [Route("createCsrCertificateAndSign")]
-        public async Task<IActionResult> CreateCsrCertificateAndSign([FromBody] CreateCsrRequest csrRequest)
+        public async Task<IActionResult> CreateCsrCertificateAndSign([FromBody] CertificateSigningRequest csrRequest)
         {
             _logger.LogDebug($"Call create CSR certificate and sign endpoint. Certificate name = {csrRequest.CertificateName}");
             try
             {
-                X509Certificate2 result = await _keyVaultCertProvider.CreateCsrCertificateAndSignAsync(csrRequest);
+                string issuerCAName = _configuration.IssuingCA;
+                PublicKey publicKey = (await GetPublicKeyList())?.FirstOrDefault() ?? null;
+                X509Certificate2 result = await _keyVaultCertProvider.CreateCsrCertificateAndSignAsync(csrRequest, publicKey, issuerCAName);
 
                 string pkcs7 = EncodeCertificatesAsPkcs7(new[] { result });
                 return Ok(pkcs7);
@@ -141,66 +134,85 @@ namespace KeyVaultCA.Web.Controllers
             return Content(pkcs7, PKCS7_MIME_TYPE);
         }
 
-        [HttpGet("getSignedCertificateByName")]
-        public async Task<IActionResult> GetSignedCertificateByName(string name)
+        //[HttpGet("getSignedCertificateByName")]
+        //public async Task<IActionResult> GetSignedCertificateByName(string name)
+        //{
+        //    _logger.LogDebug("Call 'Get Signed Certificate by name' endpoint.");
+        //    IList<X509Certificate2> certs = await GetCertificatesByNameAsync(name);
+
+        //    byte[] rawData = certs.FirstOrDefault().RawData;
+
+        //    X509Certificate2 signedCert = await _keyVaultCertProvider.SignRequestAsync(
+        //        rawData, _configuration.IssuingCA, _configuration.CertValidityInDays, false);
+
+        //    //string pkcs7 = EncodeCertificatesAsPkcs7(certs.ToArray());
+        //    //return Content(pkcs7, PKCS7_MIME_TYPE);
+
+        //    return Ok(signedCert);
+        //}
+
+        //[HttpPost("testCsr")]
+        //public async Task<IActionResult> TestCsr([FromBody] CertificateSigningRequest csrRequest)
+        //{
+        //    //Both ECDSA and RSA included here, though ECDSA is probably better.
+        //    using (ECDsa privateClientEcdsaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256))
+        //    //using(RSA privateClientRsaKey = RSA.Create(2048))
+        //    {
+        //        //A client creates a certificate signing request.
+        //        CertificateRequest request = new(
+        //            new X500DistinguishedName(
+        //                $"CN={csrRequest.CommonName}," +
+        //                $" O={csrRequest.Organization}," +
+        //                $" OU={csrRequest.OrganizationUnit}," +
+        //                $" L={csrRequest.Locality}," +
+        //                $" ST={csrRequest.State}," +
+        //                $" C={csrRequest.Country}," +
+        //                $" E={csrRequest.Email}"),
+        //            privateClientEcdsaKey,
+        //            HashAlgorithmName.SHA256);
+
+        //        SubjectAlternativeNameBuilder sanBuilder = new();
+        //        sanBuilder.AddDnsName($"{csrRequest.CommonName}");
+        //        request.CertificateExtensions.Add(sanBuilder.Build());
+
+        //        //Not a CA, a server certificate.
+        //        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        //        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
+        //        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.8") }, false));
+
+        //        byte[] derEncodedCsr = request.CreateSigningRequest();
+        //        StringBuilder csrSb = new();
+        //        csrSb.AppendLine("-----BEGIN CERTIFICATE REQUEST-----");
+        //        csrSb.AppendLine(Convert.ToBase64String(derEncodedCsr));
+        //        csrSb.AppendLine("-----END CERTIFICATE REQUEST-----");
+
+        //        //Thus far OK, this csr seems to be working when using an online checker.
+        //        string csr = csrSb.ToString();
+
+        //        return Ok(csr);
+        //    }
+        //}
+
+        private async Task<List<PublicKey>> GetPublicKeyList()
         {
-            _logger.LogDebug("Call 'Get Signed Certificate by name' endpoint.");
-            IList<X509Certificate2> certs = await GetCertificatesByNameAsync(name);
-
-            byte[] rawData = certs.FirstOrDefault().RawData;
-
-            X509Certificate2 signedCert = await _keyVaultCertProvider.SignRequestAsync(
-                rawData, _configuration.IssuingCA, _configuration.CertValidityInDays, false);
-
-            //string pkcs7 = EncodeCertificatesAsPkcs7(certs.ToArray());
-            //return Content(pkcs7, PKCS7_MIME_TYPE);
-
-            return Ok(signedCert);
-        }
-
-        [HttpPost("testCsr")]
-        public async Task<IActionResult> TestCsr([FromBody] CreateCsrRequest csrRequest)
-        {
-            //Both ECDSA and RSA included here, though ECDSA is probably better.
-            using (ECDsa privateClientEcdsaKey = ECDsa.Create(ECCurve.NamedCurves.nistP256))
-            //using(RSA privateClientRsaKey = RSA.Create(2048))
+            List<PublicKey> publicKeys = new();
+            try
             {
-                //A client creates a certificate signing request.
-                CertificateRequest request = new(
-                    new X500DistinguishedName(
-                        $"CN={csrRequest.CommonName}," +
-                        $" O={csrRequest.Organization}," +
-                        $" OU={csrRequest.OrganizationUnit}," +
-                        $" L={csrRequest.Locality}," +
-                        $" ST={csrRequest.State}," +
-                        $" C={csrRequest.Country}," +
-                        $" E={csrRequest.Email}"),
-                    privateClientEcdsaKey,
-                    HashAlgorithmName.SHA256);
+                IList<X509Certificate2> caCerts = await _keyVaultCertProvider.GetPublicCertificatesByName(new[] { _configuration.IssuingCA });
 
-                SubjectAlternativeNameBuilder sanBuilder = new();
-                sanBuilder.AddDnsName($"{csrRequest.CommonName}");
-                request.CertificateExtensions.Add(sanBuilder.Build());
-
-                //Not a CA, a server certificate.
-                request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
-                request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
-                request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.8") }, false));
-
-                byte[] derEncodedCsr = request.CreateSigningRequest();
-                StringBuilder csrSb = new();
-                csrSb.AppendLine("-----BEGIN CERTIFICATE REQUEST-----");
-                csrSb.AppendLine(Convert.ToBase64String(derEncodedCsr));
-                csrSb.AppendLine("-----END CERTIFICATE REQUEST-----");
-
-                //Thus far OK, this csr seems to be working when using an online checker.
-                string csr = csrSb.ToString();
-
-                return Ok(csr);
+                foreach (X509Certificate2 cert in caCerts)
+                {
+                    publicKeys.Add(cert.PublicKey);
+                }
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetPublicKeys error");
+            }
+            return publicKeys;
         }
 
-        private async Task<IList<X509Certificate2>> GetCertificatesByNameAsync(string name) 
+        private async Task<IList<X509Certificate2>> GetCertificatesByNameAsync(string name)
             => await _keyVaultCertProvider.GetPublicCertificatesByName(new[] { name });
 
         private string EncodeCertificatesAsPkcs7(X509Certificate2[] certs)
