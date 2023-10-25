@@ -171,7 +171,8 @@ namespace KeyVaultCA.Web
 
             services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "KeyVaultCA.Web", Version = "v1" });
+                c.EnableAnnotations();
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "KeyVaultCA Create and Sign", Version = "v1" });
             });
 
         }

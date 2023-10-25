@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Pkcs;
+using Swashbuckle.AspNetCore.Annotations;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -36,8 +37,10 @@ namespace KeyVaultCA.Web.Controllers
 
         [HttpGet]
         //[Authorize]
-        [Route(".well-known/est/cacerts")]
-        [Route("ca/.well-known/est/cacerts")]
+        //[Route(".well-known/est/cacerts")]
+        //[Route("ca/.well-known/est/cacerts")]
+        [Route("getCACertificates")]
+        [SwaggerOperation(Summary ="Returns a list of CA Certificates")]
         public async Task<IActionResult> GetCACertsAsync()
         {
             _logger.LogDebug("Call 'CA certs' endpoint.");
@@ -47,11 +50,37 @@ namespace KeyVaultCA.Web.Controllers
             return Content(pkcs7, PKCS7_MIME_TYPE);
         }
 
+        
+
+        [HttpGet]
+        [Route("getPublicKey")]
+        [SwaggerOperation(Summary = "Retrieves the public key for the CA certificate")]
+        public async Task<IActionResult> GetPublicKey()
+        {
+            List<PublicKey> publicKeys = await GetPublicKeyList();
+            if (publicKeys.Any())
+                return Ok(publicKeys);
+            return NoContent();
+        }
+
+        [HttpGet("getCertificateByName")]
+        [SwaggerOperation(Summary = "Returns a certificate content by its name")]
+        public async Task<IActionResult> GetCertificateByName(string name)
+        {
+            _logger.LogDebug("Call 'Get Certificate by name' endpoint.");
+            IList<X509Certificate2> certs = await GetCertificatesByNameAsync(name);
+            string pkcs7 = EncodeCertificatesAsPkcs7(certs.ToArray());
+
+            return Content(pkcs7, PKCS7_MIME_TYPE);
+        }
+
         [HttpPost]
         //[Authorize]
-        [Route(".well-known/est/simpleenroll")]
-        [Route("ca/.well-known/est/simpleenroll")]
+        //[Route(".well-known/est/simpleenroll")]
+        //[Route("ca/.well-known/est/simpleenroll")]
+        [Route("signPKCS10Content")]
         [Consumes(PKCS10_MIME_TYPE)]
+        [SwaggerOperation(Summary = "Executes a sign operation on a Pkcs10 content")]
         public async Task<IActionResult> EnrollAsync()
         {
             _logger.LogDebug("Call 'Simple Enroll' endpoint.");
@@ -71,18 +100,10 @@ namespace KeyVaultCA.Web.Controllers
             return Content(pkcs7, PKCS7_MIME_TYPE);
         }
 
-        [HttpGet]
-        [Route("getPublicKey")]
-        public async Task<IActionResult> GetPublicKey()
-        {
-            List<PublicKey> publicKeys = await GetPublicKeyList();
-            if (publicKeys.Any())
-                return Ok(publicKeys);
-            return NoContent();
-        }
-
         [HttpPost]
         [Route("createCsrCertificate")]
+        [SwaggerOperation(Summary = "Creates a certificate and saves to KV, without signature")]
+        [ApiExplorerSettings(IgnoreApi =true)]
         public async Task<IActionResult> CreateCsrCertificate([FromBody] CertificateSigningRequest csrRequest)
         {
             _logger.LogDebug($"Call create CSR certificate endpoint. Certificate name = {csrRequest.CertificateName}");
@@ -105,6 +126,7 @@ namespace KeyVaultCA.Web.Controllers
 
         [HttpPost]
         [Route("createCsrCertificateAndSign")]
+        [SwaggerOperation(Summary = "Based on a set of parameters, it creates a certificate and returns the certificate signed by CA")]
         public async Task<IActionResult> CreateCsrCertificateAndSign([FromBody] CertificateSigningRequest csrRequest)
         {
             _logger.LogDebug($"Call create CSR certificate and sign endpoint. Certificate name = {csrRequest.CertificateName}");
@@ -124,14 +146,28 @@ namespace KeyVaultCA.Web.Controllers
             }
         }
 
-        [HttpGet("getCertificateByName")]
-        public async Task<IActionResult> GetCertificateByName(string name)
+        [HttpPost]
+        [Route("createCACertificate")]
+        [SwaggerOperation(Summary = "Creates a CA certificate")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<IActionResult> CreateCACertificate([FromBody] CertificateSigningRequest csrRequest)
         {
-            _logger.LogDebug("Call 'Get Certificate by name' endpoint.");
-            IList<X509Certificate2> certs = await GetCertificatesByNameAsync(name);
-            string pkcs7 = EncodeCertificatesAsPkcs7(certs.ToArray());
+            _logger.LogDebug($"Call create CA certificate endpoint. Certificate name = {csrRequest.CertificateName}");
+            try
+            {
+                string subject = $"C={csrRequest.Country}, ST={csrRequest.State}, L={csrRequest.Locality}, O={csrRequest.Organization}, OU={csrRequest.OrganizationUnit}, CN={csrRequest.CommonName}";
+                await _keyVaultCertProvider.CreateCACertificateAsync(csrRequest.CertificateName, subject, 1);
 
-            return Content(pkcs7, PKCS7_MIME_TYPE);
+                Response<X509Certificate2> certificate = await _keyVaultCertProvider.DownloadCertificateAsync(csrRequest.CertificateName);
+
+                string pkcs7 = EncodeCertificatesAsPkcs7(new[] { certificate.Value });
+                return Ok(pkcs7);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "createCACertificate error");
+                return BadRequest(ex.Message);
+            }
         }
 
         //[HttpGet("getSignedCertificateByName")]
