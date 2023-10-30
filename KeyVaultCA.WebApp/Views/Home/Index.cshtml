@@ -1,0 +1,41 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+@model KeyVaultCa.Core.Models.CertificateSigningRequest;
+
+<script src="~/lib/jquery/dist/jquery.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.js"></script>
+<script src="~/js/bootstrap-datepicker.js"></script>
+
+<div class="text-center">
+    <h1 class="display-4">Firma del Certificato</h1>
+
+	@using (Html.BeginForm("CreateCertificateAndSign", "Home", FormMethod.Post))
+	{
+		<div>
+			Compila il seguente form per la creazione di una Signing Request
+		</div>
+		<div>
+			@Html.LabelFor(x=>x.CertificateName)
+			@Html.TextBoxFor(x=>x.CertificateName)
+		</div>
+		<div>
+			Inserisci durata di validità del certificato
+		</div>
+		<div>
+			@Html.LabelFor(x=>x.StartDate)
+			@Html.TextBoxFor(x=>x.EndDate, new{@class="datebox", id="start-date"})
+		</div>
+		<div>
+			@Html.LabelFor(x=>x.EndDate)
+			@Html.TextBoxFor(x=>x.EndDate, new{@class="datebox", id="end-date"})
+		</div>
+
+		<input type="submit" value="Crea certificato firmato dalla CA" />
+	}
+</div>
+
+
+<script type="text/javascript">
+	$('.datebox').datepicker();
+</script>

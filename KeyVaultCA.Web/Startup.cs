@@ -65,7 +65,7 @@ namespace KeyVaultCA.Web
             services.AddSingleton<IKeyVaultManager, KeyVaultManager>();
             var secretManager =
 
-            services.AddControllers();
+            services.AddControllersWithViews();
 
             services.AddScoped<IUserService, UserService>();
 
@@ -193,10 +193,16 @@ namespace KeyVaultCA.Web
             app.UseForwardedHeaders();
             app.UseAuthentication();
             app.UseAuthorization();
-            app.UseEndpoints(endpoints =>
+            app.UseEndpoints(endpoints=>
             {
-                endpoints.MapControllers();
+                endpoints.MapControllerRoute(
+                    name:"default",
+                    pattern:"{controller=Home}/{action=Index}");
             });
+            //app.UseEndpoints(endpoints =>
+            //{
+            //    endpoints.MapControllers();
+            //});
         }
     }
 }

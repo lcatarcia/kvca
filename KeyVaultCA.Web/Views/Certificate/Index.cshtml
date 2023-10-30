@@ -1,0 +1,60 @@
+﻿@model KeyVaultCA.Web.Models.SignResponse;
+
+<link href="~/wwwroot/css/jquery.datetimepicker.min.css" rel="stylesheet" />
+
+@section scripts{
+	<script src="~/lib/jquery/dist/jquery.js"></script>
+	<script src="~/wwwroot/js.bootstrap.js"></script>
+	<script src="~/wwwroot/js/jquery.datetimepicker.full.js"></script>
+	<script src="~/wwwroot/js/jquery.datetimepicker.full.min.js"></script>
+	<script src="~/wwwroot/js/bootstrap-datepicker.js"></script>
+}
+
+@{
+	var csrRequest = Model.Csr;
+}
+
+@using (Html.BeginForm("Index", "Certificate", FormMethod.Post))
+{
+	@Html.HiddenFor(x=>csrRequest.Email)
+	@Html.HiddenFor(x=>csrRequest.KeySize)
+	@Html.HiddenFor(x=>csrRequest.OrganizationUnit)
+	@Html.HiddenFor(x=>csrRequest.Organization)
+	@Html.HiddenFor(x=>csrRequest.CommonName)
+	@Html.HiddenFor(x=>csrRequest.SubjectAlternativeName)
+	@Html.HiddenFor(x=>csrRequest.Country)
+	@Html.HiddenFor(x=>csrRequest.Locality)
+	@Html.HiddenFor(x=>csrRequest.State)
+
+	<h1>
+		Firma del Certificato
+	</h1>
+	<div>
+		Compila il seguente form per la creazione di una Signing Request
+	</div>
+	<div>
+		@Html.LabelFor(x=>csrRequest.CertificateName)
+		@Html.TextBoxFor(x=>csrRequest.CertificateName)
+	</div>
+	<div>
+		Inserisci durata di validità del certificato
+	</div>
+	<div>
+		@Html.LabelFor(x=>csrRequest.StartDate)
+		@Html.TextBoxFor(x=>csrRequest.StartDate, new{@class="datebox", id="start-date"})
+	</div>
+	<div>
+		@Html.LabelFor(x=>csrRequest.EndDate)
+		@Html.TextBoxFor(x=>csrRequest.EndDate, new{@class="datebox", id="end-date"})
+	</div>
+
+	<input type="submit" value="Crea certificato firmato dalla CA" />
+}
+
+<div id="result-container">
+	<partial name="_CreateAndSignResult" model="@Model" />
+</div>
+
+<script type="text/javascript">
+	$('.datebox').datepicker();
+</script>
