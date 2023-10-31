@@ -19,48 +19,26 @@
 <script type="text/javascript">
 	$(function () {
 		$('#download-pfx').on("click", function () {
-
-			// var sampleArr = base64ToArrayBuffer('@Convert.ToBase64String(Model.PfxResult)');
-			// var sampleArr = base64ToArrayBuffer('@Model.Pkcs7Result');
-
-			// saveByteArray("@Model.Csr.CertificateName", sampleArr);
-			// saveByteArray("@Model.Csr.CertificateName", '@Convert.ToBase64String(Model.PfxResult)');
-			saveByteArray("@Model.Csr.CertificateName", '@Model.Pkcs7Result');
-
-			// $.ajax({
-			// 	url: '@Url.Action("DownloadPfx","Certificate")',
-			// 	type: "POST",
-			// 	data: {
-			// 		pkcs7: '@Model.Pkcs7Result'
-			// 	},
-
-			// 	success: function (data) {
-
-			// 	},
-			// 	error: function (xhr) {
-
-			// 	}
-			// });
+			DownloadFile();
 		});
 	});
 
-	function base64ToArrayBuffer(base64) {
-		var binaryString = window.atob(base64);
-		var binaryLen = binaryString.length;
-		var bytes = new Uint8Array(binaryLen);
-		for (var i = 0; i < binaryLen; i++) {
-			var ascii = binaryString.charCodeAt(i);
-			bytes[i] = ascii;
-		}
-		return bytes;
+	async function DownloadFile() {
+		var name = '@Model.Csr.CertificateName';
+		var apiUrl = '@Url.Action("DownloadPfx", "Certificate", new{name=Model.Csr.CertificateName})';
+		const response = await fetch(apiUrl);
+
+		const blob = await response.blob();
+
+		// Create a temporary anchor element to trigger the download
+		const a = document.createElement('a');
+		const url = window.URL.createObjectURL(blob);
+		a.href = url;
+		a.download = name + '.pfx';
+		a.click();
+
+		// Clean up
+		window.URL.revokeObjectURL(url);
 	}
 
-	function saveByteArray(file, byte) {
-		var blob = new Blob([byte], { type: "application/x-pkcs12" });
-		var link = document.createElement('a');
-		link.href = window.URL.createObjectURL(blob);
-		var fileName = file;
-		link.download = fileName;
-		link.click();
-	};
 </script>

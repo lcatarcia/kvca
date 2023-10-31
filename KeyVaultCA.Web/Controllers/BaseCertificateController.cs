@@ -56,5 +56,11 @@ namespace KeyVaultCA.Web.Controllers
 
 		public byte[] EncodeCertificateAsPfx(X509Certificate2 certificate)
 			=> certificate.Export(X509ContentType.Pfx);
+
+		public byte[] EncodeCertificateAsPkcs12(X509Certificate2 certificate)
+			=> certificate?.Export(X509ContentType.Pkcs12);
+
+		public async Task<IList<X509Certificate2>> GetCertificatesByNameAsync(string name)
+			=> await _keyVaultCertProvider.GetPublicCertificatesByName(new[] { name });
 	}
 }
