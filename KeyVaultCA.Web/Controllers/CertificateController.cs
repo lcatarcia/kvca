@@ -57,13 +57,14 @@ namespace KeyVaultCA.Web.Controllers
 				PublicKey publicKey = (await GetPublicKeyList())?.FirstOrDefault() ?? null;
 				X509Certificate2 result = await _keyVaultCertProvider.CreateCsrCertificateAndSignAsync(csrRequest, publicKey, issuerCAName);
 
-
+				
 				string pkcs7 = EncodeCertificatesAsPkcs7(new[] { result });
 
 				SignResponse signResponse = new()
 				{
 					Csr = csrRequest,
-					Result = pkcs7
+					Pkcs7Result = pkcs7,
+					PfxResult = EncodeCertificateAsPfx(result)
 				};
 				return View(signResponse);
 				//return Ok(pkcs7);
@@ -74,5 +75,11 @@ namespace KeyVaultCA.Web.Controllers
 				return BadRequest(ex.Message);
 			}
 		}
+
+		//[HttpPost]
+		//public async Task<IActionResult> DownloadPfx(string pkcs7)
+		//{
+		//	byte[] export = pkcs7.Export(X509ContentType.Pfx);
+		//}
 	}
 }

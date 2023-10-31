@@ -210,7 +210,7 @@ namespace KeyVaultCa.Core
 
                 // create policy for unknown issuer and reuse key
                 CertificatePolicy policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
-                var tags = CreateCertificateTags(id, false);
+				Dictionary<string, string> tags = CreateCertificateTags(id, false);
 
                 // create the CSR
                 _logger.LogDebug("Starting to create the CSR.");

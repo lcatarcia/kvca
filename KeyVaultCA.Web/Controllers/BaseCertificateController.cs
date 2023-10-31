@@ -53,5 +53,8 @@ namespace KeyVaultCA.Web.Controllers
 
 			return builder.ToString();
 		}
+
+		public byte[] EncodeCertificateAsPfx(X509Certificate2 certificate)
+			=> certificate.Export(X509ContentType.Pfx);
 	}
 }
