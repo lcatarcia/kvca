@@ -7,6 +7,7 @@ using Azure;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
 using KeyVaultCa.Core.Models;
+using Microsoft.Extensions.Azure;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Pkcs;
@@ -65,8 +66,8 @@ namespace KeyVaultCa.Core
 
             try
             {
-                // create policy for self signed certificate with a new key
-                var policySelfSignedNewKey = CreateCertificatePolicy(subject, keySize, true, false);
+				// create policy for self signed certificate with a new key
+				CertificatePolicy policySelfSignedNewKey = CreateCertificatePolicy(subject, keySize, true, false);
 
                 CertificateOperation newCertificateOperation = await _certificateClient.StartCreateCertificateAsync(id, policySelfSignedNewKey, true, null, ct).ConfigureAwait(false);
                 await newCertificateOperation.WaitForCompletionAsync(ct).ConfigureAwait(false);
@@ -85,9 +86,9 @@ namespace KeyVaultCa.Core
                 _logger.LogDebug("Temporary certificate identifier is {certIdentifier}.", caTempCertIdentifier);
                 _logger.LogDebug("Temporary certificate backing key identifier is {key}.", createdCertificateBundle.Value.KeyId);
 
-                // create policy for unknown issuer and reuse key
-                var policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
-                var tags = CreateCertificateTags(id, false);
+				// create policy for unknown issuer and reuse key
+				CertificatePolicy policyUnknownReuse = CreateCertificatePolicy(subject, keySize, false, true);
+				Dictionary<string, string> tags = CreateCertificateTags(id, false);
 
                 // create the CSR
                 _logger.LogDebug("Starting to create the CSR.");
@@ -101,13 +102,13 @@ namespace KeyVaultCa.Core
                 // decode the CSR and verify consistency
                 _logger.LogDebug("Decode the CSR and verify consistency.");
                 Pkcs10CertificationRequest pkcs10CertificationRequest = new Org.BouncyCastle.Pkcs.Pkcs10CertificationRequest(createResult.Properties.Csr);
-                var info = pkcs10CertificationRequest.GetCertificationRequestInfo();
+				CertificationRequestInfo info = pkcs10CertificationRequest.GetCertificationRequestInfo();
                 if (createResult.Properties.Csr == null ||
                     pkcs10CertificationRequest == null ||
                     !pkcs10CertificationRequest.Verify())
                 {
                     _logger.LogError("Invalid CSR.");
-                    throw new Exception("Invalid CSR.");
+					throw new Exception("Invalid CSR.");
                 }
 
                 // create the self signed root CA certificate
@@ -177,7 +178,7 @@ namespace KeyVaultCa.Core
                 // delete pending operations
                 _logger.LogDebug("Deleting pending operations for certificate id {id}.", id);
                 CertificateOperation op = await _certificateClient.GetCertificateOperationAsync(id);
-                await op.DeleteAsync();
+				await op.DeleteAsync();
             }
             catch
             {
@@ -234,13 +235,13 @@ namespace KeyVaultCa.Core
                 }
 
                 // create the self signed root CA certificate
-                _logger.LogDebug("Create the self signed root CA certificate.");
+                _logger.LogDebug("Create the self signed certificate.");
 
                 RSA rsa = rootPublicKey.GetRSAPublicKey();
                 Response<KeyVaultCertificateWithPolicy> caCertificate = await GetCertificateAsync(issuerCAName, ct);
                 byte[] cer = caCertificate.Value.Cer;
                 X509Certificate2 issuerCertificate = new(cer);
-                
+
                 X509Certificate2 signedcert = await KeyVaultCertFactory.CreateSignedCertificate(
                     subject,
                     (ushort)keySize,
@@ -445,7 +446,7 @@ namespace KeyVaultCa.Core
 
         private Dictionary<string, string> CreateCertificateTags(string id, bool trusted)
         {
-            var tags = new Dictionary<string, string>
+			Dictionary<string, string> tags = new Dictionary<string, string>
             {
                 [id] = trusted ? "Trusted" : "Issuer"
             };
@@ -461,8 +462,8 @@ namespace KeyVaultCa.Core
             bool reuseKey = false,
             bool exportable = false)
         {
-            var issuerName = selfSigned ? "Self" : "Unknown";
-            var policy = new CertificatePolicy(issuerName, subject)
+			string issuerName = selfSigned ? "Self" : "Unknown";
+			CertificatePolicy policy = new(issuerName, subject)
             {
                 Exportable = exportable,
                 KeySize = keySize,
