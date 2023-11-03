@@ -1,27 +1,59 @@
 ﻿@model KeyVaultCA.Web.Models.SignResponse;
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
-<div class="form-row">
+<div id="counter-section" class="form-row">
 	<div class="input-data">
-		@Html.TextAreaFor(x=>x.Pkcs7Result, new{@style="width:760px;height:370px;"})
-		@* <input type="text" asp-for="@Model.Result" /> *@
+
 	</div>
 </div>
-<div class="form-row submit-btn">
-	<div class="input-data">
-		<button class="btn " id="download-pfx">
-			Download
-			<i class="fa fa-download"></i>
-		</button>
+<div id="certificate-section">
+	<div class="form-row">
+		<div class="input-data">
+			@Html.TextAreaFor(x=>x.Pkcs7Result, new{@style="width:760px;height:370px;"})
+			@* <input type="text" asp-for="@Model.Result" /> *@
+		</div>
+	</div>
+	<div class="form-row submit-btn">
+		<div class="input-data">
+			<button class="btn " id="download-pfx">
+				Download
+				<i class="fa fa-download"></i>
+			</button>
+		</div>
 	</div>
 </div>
 
 <script type="text/javascript">
 	$(function () {
+		var counter = 30;
+		var newElement = $('#counter-section')[0];
+		newElement.innerHTML = counter + " seconds.";
+		var id;
+		startTimer(counter, newElement, id);
 		$('#download-pfx').on("click", function () {
 			DownloadFile();
 		});
 	});
+
+	function startTimer(counter, newElement, id) {
+		id = setInterval(function () {
+			counter--;
+			if (counter < 0) {
+				//visualization and download not allowed
+				$("#certificate-section").hide();
+				newElement.innerHTML = "Certificate no longer downloadable. Please generate another certificate.";
+				clearInterval(id);
+			}
+			else {
+				// update the counter
+				newElement.innerHTML = + counter.toString() + " seconds";
+			}
+		}, 1000);
+	}
+
+	function manageTime(seconds) {
+
+	}
 
 	async function DownloadFile() {
 		var name = '@Model.Csr.CertificateName';
