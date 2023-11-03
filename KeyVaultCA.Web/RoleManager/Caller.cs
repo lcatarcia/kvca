@@ -1,4 +1,6 @@
-﻿using KeyVaultCA.Web.Models;
+﻿using KeyVaultCa.Core.Models;
+using KeyVaultCA.Web.Models;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -12,45 +14,45 @@ namespace KeyVaultCA.Web.RoleManager
 {
 	public class Caller
 	{
-#warning Poi questi valori andranno gestiti meglio
-		private const string TenantName = "testb2c01siag";
-		private const string Policy = "B2C_1A_SIGNUP_SIGNIN_SPID";
+		private readonly ILogger _logger;
 
-		private const string GrantType = "client_credentials";
-		private const string ClientId = "f4dd05ff-f3ab-42c4-b244-a58b6220879c";
-		private const string ClientSecret = "duS8Q~tm1QBvUI4O9gr0W2TGbjwDBrKfBB4rFbqI";
-		private const string Scope = "https://testb2c01siag.onmicrosoft.com/b5525739-b4fa-402d-bc0c-d0c7e6888ab2/.default";
-
-		private string GetAccessTokenUrl = $"https://{TenantName}.b2clogin.com/{TenantName}.onmicrosoft.com/{Policy}/oauth2/v2.0/token";
-		public async Task<string> FetchAccessToken()
+        public Caller()
+        {
+			ILoggerFactory loggerFactory = new LoggerFactory();
+            _logger = loggerFactory.CreateLogger<Caller>();
+        }
+        public async Task<AccessTokenResponse> FetchAccessToken(AccessTokenRequest request, string url)
 		{
-			string token = string.Empty;
+			AccessTokenResponse accessTokenResponse = null;
 
-			AccessTokenRequest request = new()
-			{
-				ClientId = ClientId,
-				ClientSecret = ClientSecret,
-				Scope = Scope,
-				GrantType = GrantType
-			};
 			using (HttpClient client = new())
 			{
-				HttpResponseMessage response = await client.PostAsJsonAsync(GetAccessTokenUrl, request);
-
-				if (response.IsSuccessStatusCode)
+				using (FormUrlEncodedContent content = new(request.GetAsKeyValuePairs()))
 				{
-					string fullResponse = await response.Content.ReadAsStringAsync();
-					AccessTokenResponse tokenResponse = JsonSerializer.Deserialize<AccessTokenResponse>(fullResponse);
-					token = tokenResponse.AccessToken;
+					content.Headers.Clear();
+					content.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+
+					HttpResponseMessage response = await client.PostAsync(url, content);
+
+					if (response.IsSuccessStatusCode)
+					{
+						string fullResponse = await response.Content.ReadAsStringAsync();
+						accessTokenResponse = JsonSerializer.Deserialize<AccessTokenResponse>(fullResponse);
+						_logger.LogInformation("access token fetched: {0}", accessTokenResponse.AccessToken);
+					}
+					else
+					{
+						_logger.LogError("call to {0} in error: {1}", url, response.ReasonPhrase);
+					}
 				}
 			}
-
-			return token;
+			return accessTokenResponse;
 		}
 
-		public async Task<UserService> GetUserServiceForService(GetUserServiceRequest request, string token)
+		public async Task<UserService> FetchUserService(GetUserServiceRequest request, string token)
 		{
-			HttpRequestMessage httpRequest = new HttpRequestMessage()
+			UserService userService = null;
+			HttpRequestMessage httpRequest = new()
 			{
 				RequestUri = new Uri("https://app-rolemanager-api-siag-test.azurewebsites.net/GetUserServiceForService"),
 				Method = HttpMethod.Post,
@@ -65,11 +67,11 @@ namespace KeyVaultCA.Web.RoleManager
 				if (response.StatusCode == System.Net.HttpStatusCode.OK)
 				{
 					string responseString = await response.Content.ReadAsStringAsync();
-					return JsonSerializer.Deserialize<UserService>(responseString);
-
+					userService = JsonSerializer.Deserialize<UserService>(responseString);
 				}
 			}
-			return null;
+
+			return userService;
 		}
 	}
 }

@@ -94,7 +94,11 @@ namespace KeyVaultCA.Web.Controllers
             _logger.LogInformation("Is a CA certificate: {flag}.", caCert);
 
             X509Certificate2 cert = await _keyVaultCertProvider.SignRequestAsync(
-                Convert.FromBase64String(cleanedUpBody), _configuration.IssuingCA, _configuration.CertValidityInDays, caCert);
+                Convert.FromBase64String(cleanedUpBody),
+                _configuration.IssuingCA,
+                _configuration.CertValidityInDays,
+                null,
+                caCert);
 
             string pkcs7 = EncodeCertificatesAsPkcs7(new[] { cert });
             return Content(pkcs7, PKCS7_MIME_TYPE);

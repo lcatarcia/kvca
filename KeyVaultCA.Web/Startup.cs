@@ -3,6 +3,7 @@ using Azure.Security.KeyVault.Secrets;
 using KeyVaultCa.Core;
 using KeyVaultCA.Web.Auth;
 using KeyVaultCA.Web.KeyVault;
+using KeyVaultCA.Web.RoleManager;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Builder;
@@ -24,75 +25,81 @@ using System.Threading.Tasks;
 
 namespace KeyVaultCA.Web
 {
-    public class Startup
-    {
-        ILogger<Startup> logger;
-        public Startup(IConfiguration configuration)
-        {
-            Configuration = configuration;
-            ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.AddDebug();
-            });
-            logger = loggerFactory.CreateLogger<Startup>();
-        }
+	public class Startup
+	{
+		ILogger<Startup> logger;
+		public Startup(IConfiguration configuration)
+		{
+			Configuration = configuration;
+			ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+			{
+				builder.AddConsole();
+				builder.AddDebug();
+			});
+			logger = loggerFactory.CreateLogger<Startup>();
+		}
 
-        public IConfiguration Configuration { get; }
+		public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddApplicationInsightsTelemetry();
+		// This method gets called by the runtime. Use this method to add services to the container.
+		public void ConfigureServices(IServiceCollection services)
+		{
+			services.AddApplicationInsightsTelemetry();
 
-            EstConfiguration estConfig = Configuration.GetSection("KeyVault").Get<EstConfiguration>();
-            services.AddSingleton(estConfig);
+			EstConfiguration estConfig = Configuration.GetSection("KeyVault").Get<EstConfiguration>();
+			services.AddSingleton(estConfig);
 
-            AuthConfiguration estAuth = Configuration.GetSection("EstAuthentication").Get<AuthConfiguration>();
-            services.AddSingleton(estAuth);
+			AuthConfiguration estAuth = Configuration.GetSection("EstAuthentication").Get<AuthConfiguration>();
+			services.AddSingleton(estAuth);
 
-            var azureCredential = new DefaultAzureCredential();
-            services.AddSingleton(azureCredential);
-            services.AddSingleton<KeyVaultServiceClient>();
-            services.AddSingleton<IKeyVaultCertificateProvider, KeyVaultCertificateProvider>();
+			Caller caller = new();
+			services.AddSingleton(caller);
 
-            services.AddAzureClients(azureClientFactoryBuilder =>
-            {
-                azureClientFactoryBuilder.AddSecretClient(
-                    Configuration.GetSection("KeyVault")
-                    );
-            });
-            services.AddSingleton<IKeyVaultManager, KeyVaultManager>();
-            var secretManager =
+			RoleManagerConfiguration roleManagerConfig = Configuration.GetSection("UserFlow").Get<RoleManagerConfiguration>();
+			services.AddSingleton(roleManagerConfig);
 
-            services.AddControllersWithViews();
+			DefaultAzureCredential azureCredential = new DefaultAzureCredential();
+			services.AddSingleton(azureCredential);
+			services.AddSingleton<KeyVaultServiceClient>();
+			services.AddSingleton<IKeyVaultCertificateProvider, KeyVaultCertificateProvider>();
 
-            services.AddScoped<IUserService, UserService>();
+			services.AddAzureClients(azureClientFactoryBuilder =>
+			{
+				azureClientFactoryBuilder.AddSecretClient(
+					Configuration.GetSection("KeyVault")
+					);
+			});
+			services.AddSingleton<IKeyVaultManager, KeyVaultManager>();
+			var secretManager =
 
-            if (estAuth.AuthMode == AuthMode.Basic)
-            {
-                services.AddAuthentication("BasicAuthentication")
-                    .AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("BasicAuthentication", null);
-            }
-            else if (estAuth.AuthMode == AuthMode.x509)
-            {
-                services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
-                   .AddCertificate(async options =>
-                   {
-                       var trustedCAs = new List<X509Certificate2>();
-                       var currentDirectory = AppContext.BaseDirectory;
-                       //var currentDirectory = Directory.GetCurrentDirectory();
-                       var trustedCADir = Path.Combine(currentDirectory, @"TrustedCAs");
+			services.AddControllersWithViews();
 
-                       logger.LogTrace("directory: {0}", trustedCADir);
+			services.AddScoped<IUserService, UserService>();
+
+			if (estAuth.AuthMode == AuthMode.Basic)
+			{
+				services.AddAuthentication("BasicAuthentication")
+					.AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("BasicAuthentication", null);
+			}
+			else if (estAuth.AuthMode == AuthMode.x509)
+			{
+				services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+				   .AddCertificate(async options =>
+				   {
+					   var trustedCAs = new List<X509Certificate2>();
+					   var currentDirectory = AppContext.BaseDirectory;
+					   //var currentDirectory = Directory.GetCurrentDirectory();
+					   var trustedCADir = Path.Combine(currentDirectory, @"TrustedCAs");
+
+					   logger.LogTrace("directory: {0}", trustedCADir);
 
 
 #if DEBUG
-                       foreach (string file in Directory.EnumerateFiles(trustedCADir, "*.cer"))
-                       {
-                           string contents = File.ReadAllText(file);
-                           trustedCAs.Add(X509Certificate2.CreateFromPem(contents));
-                       }
+					   foreach (string file in Directory.EnumerateFiles(trustedCADir, "*.cer"))
+					   {
+						   string contents = File.ReadAllText(file);
+						   trustedCAs.Add(X509Certificate2.CreateFromPem(contents));
+					   }
 #else
                        // secret fetched from KeyVault. It contains the thumbprint of the certificate
                        SecretClient secretClient = new SecretClient(
@@ -124,87 +131,89 @@ namespace KeyVaultCA.Web
 
 #endif
 
-                       options.CustomTrustStore.AddRange(new X509Certificate2Collection(trustedCAs.ToArray()));
+					   options.CustomTrustStore.AddRange(new X509Certificate2Collection(trustedCAs.ToArray()));
 
-                       // Azure KeyVault does not support this
-                       options.RevocationMode = X509RevocationMode.NoCheck;
-                       options.ChainTrustValidationMode = X509ChainTrustMode.CustomRootTrust;
+					   // Azure KeyVault does not support this
+					   options.RevocationMode = X509RevocationMode.NoCheck;
+					   options.ChainTrustValidationMode = X509ChainTrustMode.CustomRootTrust;
 
-                       options.Events = new CertificateAuthenticationEvents
-                       {
-                           OnCertificateValidated = context =>
-                           {
-                               var claims = new[]
-                               {
-                                        new Claim(
-                                            ClaimTypes.NameIdentifier,
-                                            context.ClientCertificate.Subject,
-                                            ClaimValueTypes.String,
-                                            context.Options.ClaimsIssuer),
-                                        new Claim(
-                                            ClaimTypes.Name,
-                                            context.ClientCertificate.Subject,
-                                            ClaimValueTypes.String,
-                                            context.Options.ClaimsIssuer)
-                               };
+					   options.Events = new CertificateAuthenticationEvents
+					   {
+						   OnCertificateValidated = context =>
+						   {
+							   var claims = new[]
+							   {
+										new Claim(
+											ClaimTypes.NameIdentifier,
+											context.ClientCertificate.Subject,
+											ClaimValueTypes.String,
+											context.Options.ClaimsIssuer),
+										new Claim(
+											ClaimTypes.Name,
+											context.ClientCertificate.Subject,
+											ClaimValueTypes.String,
+											context.Options.ClaimsIssuer)
+							   };
 
-                               context.Principal = new ClaimsPrincipal(new ClaimsIdentity(claims, context.Scheme.Name));
-                               context.Success();
+							   context.Principal = new ClaimsPrincipal(new ClaimsIdentity(claims, context.Scheme.Name));
+							   context.Success();
 
-                               return Task.CompletedTask;
-                           }
-                       };
-                   })
-                   .AddCertificateCache();
+							   return Task.CompletedTask;
+						   }
+					   };
+				   })
+				   .AddCertificateCache();
 
-                services.AddCertificateForwarding(options =>
-                {
-                    options.CertificateHeader = "X-ARR-ClientCert";
-                });
+				services.AddCertificateForwarding(options =>
+				{
+					options.CertificateHeader = "X-ARR-ClientCert";
+				});
 
-                services.Configure<ForwardedHeadersOptions>(options =>
-                {
-                    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
-                    options.ForwardedProtoHeaderName = "X-Forwarded-Proto";
-                });
-            }
+				services.Configure<ForwardedHeadersOptions>(options =>
+				{
+					options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+					options.ForwardedProtoHeaderName = "X-Forwarded-Proto";
+				});
+			}
 
-            services.AddSwaggerGen(c =>
-            {
-                c.EnableAnnotations();
-                c.SwaggerDoc("v1", new OpenApiInfo { Title = "KeyVaultCA Create and Sign", Version = "v1" });
-            });
+			services.AddSwaggerGen(c =>
+			{
+				c.EnableAnnotations();
+				c.SwaggerDoc("v1", new OpenApiInfo { Title = "KeyVaultCA Create and Sign", Version = "v1" });
+			});
 
-        }
+		}
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
-        {
-            if (env.IsDevelopment())
-            {
-                app.UseDeveloperExceptionPage();
-            }
+		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+		public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+		{
+			if (env.IsDevelopment())
+			{
+				app.UseDeveloperExceptionPage();
+			}
 
-            app.UseStaticFiles();
+			app.UseStaticFiles();
 
-            app.UseSwagger();
-            app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "KeyVaultCA.Web v1"));
+			app.UseSwagger();
+			app.UseSwaggerUI(
+				c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "KeyVaultCA.Web v1")
+				);
 
-            app.UseRouting();
-            app.UseCertificateForwarding();
-            app.UseForwardedHeaders();
-            app.UseAuthentication();
-            app.UseAuthorization();
-            app.UseEndpoints(endpoints=>
-            {
-                endpoints.MapControllerRoute(
-                    name:"default",
-                    pattern:"{controller=Home}/{action=Index}");
-            });
-            //app.UseEndpoints(endpoints =>
-            //{
-            //    endpoints.MapControllers();
-            //});
-        }
-    }
+			app.UseRouting();
+			app.UseCertificateForwarding();
+			app.UseForwardedHeaders();
+			app.UseAuthentication();
+			app.UseAuthorization();
+			app.UseEndpoints(endpoints =>
+			{
+				endpoints.MapControllerRoute(
+					name: "default",
+					pattern: "{controller=Home}/{action=Index}");
+			});
+			//app.UseEndpoints(endpoints =>
+			//{
+			//    endpoints.MapControllers();
+			//});
+		}
+	}
 }

@@ -10,7 +10,10 @@ namespace KeyVaultCa.Core
     {
         Task CreateCACertificateAsync(string issuerCertificateName, string subject, int certPathLength);
         Task<byte[]> CreateCsrCertificateAsync(CertificateSigningRequest csrRequest, PublicKey publicKey);
-        Task<X509Certificate2> CreateCsrCertificateAndSignAsync(CertificateSigningRequest csrRequest, PublicKey publicKey, string issuerCAName);
+        Task<X509Certificate2> CreateCsrCertificateAndSignAsync(
+            CertificateSigningRequest csrRequest,
+            PublicKey publicKey,
+            string issuerCAName);
 
         Task<Response<X509Certificate2>> DownloadCertificateAsync(string name);
 
@@ -18,6 +21,11 @@ namespace KeyVaultCa.Core
 
         Task<X509Certificate2> GetCertificateAsync(string issuerCertificateName);
 
-        Task<X509Certificate2> SignRequestAsync(byte[] certificateRequest, string issuerCertificateName, int validityInDays, bool caCert = false);
+        Task<X509Certificate2> SignRequestAsync(
+            byte[] certificateRequest,
+            string issuerCertificateName,
+            int validityInDays, 
+            UserService userService=null,
+            bool caCert = false);
     }
 }

@@ -1,6 +1,7 @@
 ﻿using KeyVaultCa.Core;
 using KeyVaultCa.Core.Models;
 using KeyVaultCA.Web.Models;
+using KeyVaultCA.Web.RoleManager;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -16,15 +17,21 @@ namespace KeyVaultCA.Web.Controllers
 		private readonly ILogger _logger;
 		private readonly IKeyVaultCertificateProvider _keyVaultCertProvider;
 		private readonly EstConfiguration _configuration;
+		private readonly Caller _caller;
+		private readonly RoleManagerConfiguration _roleManagerConfiguration;
 
 		public CertificateController(
 			ILogger<CertificateController> logger,
 			IKeyVaultCertificateProvider certificateProvider,
-			EstConfiguration configuration) : base(logger, certificateProvider, configuration)
+			EstConfiguration configuration,
+			Caller caller,
+			RoleManagerConfiguration roleManagerConfiguration) : base(logger, certificateProvider, configuration, caller, roleManagerConfiguration)
 		{
 			_logger = logger;
 			_keyVaultCertProvider = certificateProvider;
 			_configuration = configuration;
+			_caller = caller;
+			_roleManagerConfiguration = roleManagerConfiguration;
 		}
 		public IActionResult Index()
 		{
@@ -55,6 +62,25 @@ namespace KeyVaultCA.Web.Controllers
 			{
 				string issuerCAName = _configuration.IssuingCA;
 				PublicKey publicKey = (await GetPublicKeyList())?.FirstOrDefault() ?? null;
+
+				string accessTokenUrl = $"https://{_roleManagerConfiguration.TenantName}.b2clogin.com/{_roleManagerConfiguration.TenantName}.onmicrosoft.com/{_roleManagerConfiguration.Policy}/oauth2/v2.0/token";
+
+				AccessTokenRequest accessTokenRequest = new()
+				{
+					ClientId = _roleManagerConfiguration.ClientId,
+					ClientSecret = _roleManagerConfiguration.ClientSecret,
+					Scope = _roleManagerConfiguration.Scope,
+					GrantType = _roleManagerConfiguration.GrantType
+				};
+				AccessTokenResponse accessToken = await _caller.FetchAccessToken(accessTokenRequest, accessTokenUrl);
+				GetUserServiceRequest userServiceRequest = new GetUserServiceRequest()
+				{
+					FiscalCode = "GDASDV00A01H501J",
+					ServiceId = "2ee79bc6-a8bc-4529-a1b0-9f52ff2f25ff"
+				};
+				UserService userService = await _caller.FetchUserService(userServiceRequest,accessToken.AccessToken);
+				csrRequest.UserService = userService;
+
 				X509Certificate2 result = await _keyVaultCertProvider.CreateCsrCertificateAndSignAsync(csrRequest, publicKey, issuerCAName);
 
 

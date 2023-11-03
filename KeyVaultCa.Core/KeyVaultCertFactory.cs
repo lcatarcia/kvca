@@ -15,6 +15,9 @@ using System.IO;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using System.Net;
+using KeyVaultCa.Core.Models;
+using Org.BouncyCastle.Asn1.X9;
+using System.Collections.Generic;
 
 namespace KeyVaultCa.Core
 {
@@ -36,6 +39,7 @@ namespace KeyVaultCa.Core
 			X509Certificate2 issuerCAKeyCert,
 			RSA publicKey,
 			X509SignatureGenerator generator,
+			UserService userService = null,
 			bool caCert = false,
 			int certPathLength = 0)
 		{
@@ -114,10 +118,10 @@ namespace KeyVaultCa.Core
 			}
 
 
-			string credentials = "lorenzo.catarcia@agic.cloud";
-			byte[] encodedClaims = Encoding.UTF8.GetBytes(credentials);
-			//byte[] encodedClaims = ObjectToByteArray(publicKey);
-			Oid oid = new Oid("1.3.6.1.5.5.7.3.25", "Claim Credential of certificate creator");
+			//string credentials = "lorenzo.catarcia@agic.cloud";
+			//byte[] encodedClaims = Encoding.UTF8.GetBytes(credentials);
+			byte[] encodedClaims = BuildUserInfoArray(userService);
+			Oid oid = new("1.3.6.1.5.5.7.3.25", "Claim Credential of certificate creator");
 			X509Extension x509Extension = new(oid, encodedClaims, false);
 			//X509Extension x509Extension = new(new Oid("1.3.6.1.5.5.7.3.1"), encodedClaims, false);
 			request.CertificateExtensions.Add(x509Extension);
@@ -148,6 +152,16 @@ namespace KeyVaultCa.Core
 			};
 			RSA rsa = RSA.Create(rsaKeyInfo);
 			return rsa;
+		}
+
+		private static byte[] BuildUserInfoArray(UserService userService)
+		{
+			Dictionary<string, string> keyValuePairs = new()
+			{
+				{ "name", userService.UserName},
+				{"surname", userService.UserSurname }
+			};
+			return ObjectToByteArray(keyValuePairs);
 		}
 
 		private static HashAlgorithmName GetRSAHashAlgorithmName(uint hashSizeInBits)

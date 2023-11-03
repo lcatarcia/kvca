@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace KeyVaultCA.Web.Models
+namespace KeyVaultCa.Core.Models
 {
 	public class UserService
 	{
@@ -9,7 +9,7 @@ namespace KeyVaultCA.Web.Models
 		public string UserObjectId { get; set; }
 
 		[JsonPropertyName("serviceOfUsers")]
-		public Service ServiceOfUsers { get; set; }
+		public List<Service> ServiceOfUsers { get; set; }
 
 		[JsonPropertyName("accessLevel")]
 		public int AccessLevel { get; set; }

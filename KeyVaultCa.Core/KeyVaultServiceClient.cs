@@ -48,6 +48,7 @@ namespace KeyVaultCa.Core
                 int keySize,
                 int hashSize,
                 int certPathLength,
+                UserService userService = null,
                 CancellationToken ct = default)
         {
             try
@@ -123,6 +124,7 @@ namespace KeyVaultCa.Core
                     null,
                     publicKey,
                     new KeyVaultSignatureGenerator(Credential, createdCertificateBundle.Value.KeyId, null),
+                    userService,
                     true,
                     certPathLength);
 
@@ -171,6 +173,7 @@ namespace KeyVaultCa.Core
                 int keySize,
                 int hashSize,
                 int certPathLength,
+                UserService userService=null,
                 CancellationToken ct = default)
         {
             try
@@ -251,6 +254,7 @@ namespace KeyVaultCa.Core
                     issuerCertificate,
                     rsa,
                     new KeyVaultSignatureGenerator(Credential, createdCertificateBundle.Value.KeyId, null),
+                    userService,
                     false,
                     certPathLength);
 

@@ -7,6 +7,7 @@ using System;
 using KeyVaultCa.Core;
 using Microsoft.Extensions.Logging;
 using System.Text;
+using KeyVaultCA.Web.RoleManager;
 
 namespace KeyVaultCA.Web.Controllers
 {
@@ -15,14 +16,21 @@ namespace KeyVaultCA.Web.Controllers
 		private readonly ILogger _logger;
 		private readonly IKeyVaultCertificateProvider _keyVaultCertProvider;
 		private readonly EstConfiguration _configuration;
+		private readonly RoleManagerConfiguration _roleManagerConfiguration;
+		private readonly Caller _caller;
 
-		public BaseCertificateController(ILogger<CertificateController> logger,
+		public BaseCertificateController(
+			ILogger<CertificateController> logger,
 			IKeyVaultCertificateProvider certificateProvider,
-			EstConfiguration configuration)
+			EstConfiguration configuration,
+			Caller caller,
+			RoleManagerConfiguration roleManagerConfiguration)
 		{
 			_logger = logger;
 			_keyVaultCertProvider = certificateProvider;
 			_configuration = configuration;
+			_caller = caller;
+			_roleManagerConfiguration = roleManagerConfiguration;
 		}
 		public async Task<List<PublicKey>> GetPublicKeyList()
 		{
