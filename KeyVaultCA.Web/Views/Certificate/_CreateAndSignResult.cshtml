@@ -1,9 +1,13 @@
 ﻿@model KeyVaultCA.Web.Models.SignResponse;
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<div id="counter-alert">
+	<div class="input-data">
+		Time remaining for download:
+	</div>
+</div>
 <div id="counter-section" class="form-row">
 	<div class="input-data">
-
 	</div>
 </div>
 <div id="certificate-section">
@@ -25,9 +29,9 @@
 
 <script type="text/javascript">
 	$(function () {
-		var counter = 30;
+		var counter = 5 * 60;
 		var newElement = $('#counter-section')[0];
-		newElement.innerHTML = counter + " seconds.";
+		// newElement.innerHTML = counter + " seconds.";
 		var id;
 		startTimer(counter, newElement, id);
 		$('#download-pfx').on("click", function () {
@@ -37,22 +41,30 @@
 
 	function startTimer(counter, newElement, id) {
 		id = setInterval(function () {
-			counter--;
+			let minutes = Math.floor(counter / 60);
+			let seconds = counter % 60;
 			if (counter < 0) {
 				//visualization and download not allowed
 				$("#certificate-section").hide();
+				$("#counter-alert").hide();
 				newElement.innerHTML = "Certificate no longer downloadable. Please generate another certificate.";
 				clearInterval(id);
 			}
 			else {
 				// update the counter
-				newElement.innerHTML = + counter.toString() + " seconds";
+				newElement.innerHTML = + formatTime(minutes) + ':' + formatTime(seconds);
+				// newElement.innerHTML = + counter.toString() + " seconds";
 			}
+			counter--;
 		}, 1000);
 	}
 
 	function manageTime(seconds) {
 
+	}
+
+	function formatTime(time) {
+		return (time < 10) ? '0' + time : time;
 	}
 
 	async function DownloadFile() {
